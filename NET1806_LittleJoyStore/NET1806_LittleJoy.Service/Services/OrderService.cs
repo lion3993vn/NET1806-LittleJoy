@@ -31,6 +31,7 @@ namespace NET1806_LittleJoy.Service.Services
         private readonly IMailService _mailService;
         private readonly IPointsMoneyRepository _pointsMoneyRepository;
         private readonly IMapper _mapper;
+        private static readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
 
         public OrderService(IOrderRepository orderRepository, IProductRepositoty productRepositoty, IUserRepository userRepository, IPaymentRepository paymentRepository, IVNPayService vnpayservice, IPointsMoneyRepository pointsMoneyRepository, IMailService mailService, IMapper mapper)
         {
@@ -46,125 +47,148 @@ namespace NET1806_LittleJoy.Service.Services
 
         public async Task<OrderResponseModel> CreateOrder(OrderRequestModel model, HttpContext context)
         {
-            //dùng transaction
-            using (var transaction = await _orderRepository.BeginTransactionAsync())
+            await _semaphore.WaitAsync();
+            try
             {
-                try
+                //dùng transaction
+                using (var transaction = await _orderRepository.BeginTransactionAsync())
                 {
-                    //kiểm tra user
-                    var user = await _userRepository.GetUserByIdAsync(model.UserId);
-                    if (user == null)
+                    try
                     {
-                        throw new Exception("Không tìm thấy user");
-                    }
-
-                    //tạo order add vào database
-                    var orderModel = new OrderModel()
-                    {
-                        UserId = user.Id,
-                        PhoneNumber = model.PhoneNumber,
-                        TotalPrice = model.TotalPrice,
-                        Address = model.Address,
-                        Note = model.Note,
-                        AmountDiscount = model.AmountDiscount,
-                        Status = "Đang Chờ",
-                        Date = DateTime.UtcNow.AddHours(7),
-                        DeliveryStatus = "",
-                    };
-                    var result = await _orderRepository.AddNewOrder(_mapper.Map<Order>(orderModel));
-
-                    //kiểm tra add order
-                    if (result != null)
-                    {
-                        //tạo orderCode để add vào payment
-                        var orderCode = 0;
-                        while (true)
+                        //kiểm tra user
+                        var user = await _userRepository.GetUserByIdAsync(model.UserId);
+                        if (user == null)
                         {
-                            orderCode = NumberUltils.GenerateNumber(6);
-                            var checkOrderCode = await _paymentRepository.GetPaymentByOrderCode(orderCode);
-                            if (checkOrderCode == null)
-                            {
-                                break;
-                            }
+                            throw new Exception("Không tìm thấy user");
                         }
 
-                        //add orderCode
-                        string method = "";
-                        string urlPayment = "";
-                        if (model.PaymentMethod == 1)
-                        {
-                            method = "COD";
-                            result.Status = "Đặt Hàng Thành Công";
-                            await _orderRepository.UpdateOrder(result);
-                        }
-                        else if (model.PaymentMethod == 2)
-                        {
-                            method = "VNPAY";
-                            urlPayment = _vnpayservice.RequestVNPay(orderCode, model.TotalPrice, context);
-                        }
-                        else
-                        {
-                            throw new Exception("Vui lòng chọn đúng payment method");
-                        }
-
-                        var payment = new PaymentModel()
-                        {
-                            OrderID = result.Id,
-                            Code = orderCode,
-                            Method = method,
-                            Status = "Đang Chờ",
-                        };
-                        await _paymentRepository.CreateNewPayment(_mapper.Map<Payment>(payment));
-
-                        //add orderdetails
+                        int totalPrice = 0;
                         foreach (var item in model.ProductOrders)
                         {
                             var product = await _productRepositoty.GetProductByIdAsync(item.Id);
-
-                            //kiểm tra product
                             if (product != null)
                             {
-                                if (model.PaymentMethod == 1)
-                                {
-                                    product.Quantity -= item.Quantity;
-                                    await _productRepositoty.UpdateProductAsync(product);
-                                }
+                                totalPrice += (int)product.Price * item.Quantity;
+                            }
+                        }
 
-                                var orderDetailModel = new OrderDetailModel()
+                        //tạo order add vào database
+                        var orderModel = new OrderModel()
+                        {
+                            UserId = user.Id,
+                            PhoneNumber = model.PhoneNumber,
+                            TotalPrice = totalPrice,
+                            Address = model.Address,
+                            Note = model.Note,
+                            AmountDiscount = model.AmountDiscount,
+                            Status = "Đang Chờ",
+                            Date = DateTime.UtcNow.AddHours(7),
+                            DeliveryStatus = "",
+                        };
+                        var result = await _orderRepository.AddNewOrder(_mapper.Map<Order>(orderModel));
+
+                        //kiểm tra add order
+                        if (result != null)
+                        {
+                            //tạo orderCode để add vào payment
+                            var orderCode = 0;
+                            while (true)
+                            {
+                                orderCode = NumberUltils.GenerateNumber(6);
+                                var checkOrderCode = await _paymentRepository.GetPaymentByOrderCode(orderCode);
+                                if (checkOrderCode == null)
                                 {
-                                    OrderId = result.Id,
-                                    Price = product.Price * item.Quantity,
-                                    ProductId = product.Id,
-                                    Quantity = item.Quantity,
-                                };
-                                await _orderRepository.AddNewOrderDetails(_mapper.Map<OrderDetail>(orderDetailModel));
+                                    break;
+                                }
+                            }
+
+                            //add orderCode
+                            string method = "";
+                            string urlPayment = "";
+                            if (model.PaymentMethod == 1)
+                            {
+                                method = "COD";
+                                result.Status = "Đặt Hàng Thành Công";
+                                await _orderRepository.UpdateOrder(result);
+                            }
+                            else if (model.PaymentMethod == 2)
+                            {
+                                method = "VNPAY";
+                                urlPayment = _vnpayservice.RequestVNPay(orderCode, totalPrice, context);
                             }
                             else
                             {
-                                throw new Exception("Không tìm thấy product có id: " + item.Id);
+                                throw new Exception("Vui lòng chọn đúng payment method");
                             }
-                        }
-                        await transaction.CommitAsync();
 
-                        var response = new OrderResponseModel()
+                            var payment = new PaymentModel()
+                            {
+                                OrderID = result.Id,
+                                Code = orderCode,
+                                Method = method,
+                                Status = "Đang Chờ",
+                            };
+                            await _paymentRepository.CreateNewPayment(_mapper.Map<Payment>(payment));
+
+                            //add orderdetails
+                            foreach (var item in model.ProductOrders)
+                            {
+                                var product = await _productRepositoty.GetProductByIdAsync(item.Id);
+
+                                //kiểm tra product
+                                if (product != null)
+                                {
+                                    if (model.PaymentMethod == 1)
+                                    {
+                                        if(product.Quantity < item.Quantity)
+                                        {
+                                            throw new Exception("Khong tao duoc don hang");
+                                        }
+                                        product.Quantity -= item.Quantity;
+                                        await _productRepositoty.UpdateProductAsync(product);
+                                    }
+
+                                    var orderDetailModel = new OrderDetailModel()
+                                    {
+                                        OrderId = result.Id,
+                                        Price = product.Price * item.Quantity,
+                                        ProductId = product.Id,
+                                        Quantity = item.Quantity,
+                                    };
+                                    await _orderRepository.AddNewOrderDetails(_mapper.Map<OrderDetail>(orderDetailModel));
+                                }
+                                else
+                                {
+                                    throw new Exception("Không tìm thấy product có id: " + item.Id);
+                                }
+                            }
+                            await transaction.CommitAsync();
+
+                            var response = new OrderResponseModel()
+                            {
+                                OrderCode = orderCode,
+                                UrlPayment = urlPayment,
+                                Message = "Đơn hàng được tạo thành công",
+                            };
+                            return response;
+                        }
+                        else
                         {
-                            OrderCode = orderCode,
-                            UrlPayment = urlPayment,
-                            Message = "Đơn hàng được tạo thành công",
-                        };
-                        return response;
+                            throw new Exception("Không thể tạo order");
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        throw new Exception("Không thể tạo order");
+                        await transaction.RollbackAsync();
+                        throw ex;
                     }
-                }
-                catch (Exception ex)
-                {
-                    await transaction.RollbackAsync();
-                    throw ex;
                 }
             }
+            finally
+            {
+                _semaphore.Release();
+            }
+            
         }
 
         public async Task<OrderWithDetailsModel> GetOrderByOrderCode(int orderCode)
@@ -311,35 +335,33 @@ namespace NET1806_LittleJoy.Service.Services
                     case 4:
                         {
                             orderExist.DeliveryStatus = "Giao Hàng Thành Công";
-                            if (paymentExist.Method == "COD")
+
+                            paymentExist.Status = "Thành Công";
+                            await _paymentRepository.UpdatePayment(paymentExist);
+
+                            var user = await _userRepository.GetUserByIdAsync(orderExist.UserId);
+                            if (orderExist.AmountDiscount != 0)
                             {
-                                paymentExist.Status = "Thành Công";
-                                await _paymentRepository.UpdatePayment(paymentExist);
-
-                                var user = await _userRepository.GetUserByIdAsync(orderExist.UserId);
-                                if (orderExist.AmountDiscount != 0)
-                                {
-                                    //nếu có dùng điểm thì trừ điểm
-                                    var points = await _pointsMoneyRepository.GetPointsByMoneyDiscount(orderExist.AmountDiscount);
-                                    user.Points -= points.MinPoints;
-                                }
-
-                                //cộng điểm theo đơn hàng
-                                user.Points += orderExist.TotalPrice / 1000;
-
-                                //update user
-                                await _userRepository.UpdateUserAsync(user);
-
-                                var orderWithDetails = await GetOrderByOrderCode((int)paymentExist.Code);
-                                string body = EmailContent.OrderEmail(orderWithDetails, _mapper.Map<UserModel>(user));
-
-                                await _mailService.sendEmailAsync(new MailRequest()
-                                {
-                                    ToEmail = user.Email,
-                                    Body = body,
-                                    Subject = "[Little Joy] Hóa đơn điện tử số #" + paymentExist.Code
-                                });
+                                //nếu có dùng điểm thì trừ điểm
+                                var points = await _pointsMoneyRepository.GetPointsByMoneyDiscount(orderExist.AmountDiscount);
+                                user.Points -= points.MinPoints;
                             }
+
+                            //cộng điểm theo đơn hàng
+                            user.Points += orderExist.TotalPrice / 1000;
+
+                            //update user
+                            await _userRepository.UpdateUserAsync(user);
+
+                            var orderWithDetails = await GetOrderByOrderCode((int)paymentExist.Code);
+                            string body = EmailContent.OrderEmail(orderWithDetails, _mapper.Map<UserModel>(user));
+
+                            await _mailService.sendEmailAsync(new MailRequest()
+                            {
+                                ToEmail = user.Email,
+                                Body = body,
+                                Subject = "[Little Joy] Hóa đơn điện tử số #" + paymentExist.Code
+                            });
                             break;
                         }
                     default:
@@ -396,7 +418,7 @@ namespace NET1806_LittleJoy.Service.Services
                                 await _productRepositoty.UpdateProductAsync(product);
                             }
 
-                            if(paymentExist.Method == "VNPAY")
+                            if (paymentExist.Method == "VNPAY")
                             {
                                 var user = await _userRepository.GetUserByIdAsync(orderExist.UserId);
                                 string body = EmailContent.NotificationEmail(_mapper.Map<UserModel>(user), _mapper.Map<PaymentModel>(paymentExist), _mapper.Map<OrderModel>(orderExist), "người dùng hủy đơn");
