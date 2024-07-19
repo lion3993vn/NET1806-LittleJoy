@@ -140,6 +140,10 @@ namespace NET1806_LittleJoy.Service.Services
                                 {
                                     if (model.PaymentMethod == 1)
                                     {
+                                        if(product.Quantity < item.Quantity)
+                                        {
+                                            throw new Exception("Khong tao duoc don hang");
+                                        }
                                         product.Quantity -= item.Quantity;
                                         await _productRepositoty.UpdateProductAsync(product);
                                     }
