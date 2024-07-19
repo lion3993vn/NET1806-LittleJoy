@@ -134,29 +134,16 @@ namespace NET1806_LittleJoy.Service.Services
 
                                     //lấy user để cộng, trừ điểm theo order
                                     var user = await _userRepository.GetUserByIdAsync(order.UserId);
-                                    //if (order.AmountDiscount != 0)
-                                    //{
-                                    //    //nếu có dùng điểm thì trừ điểm
-                                    //    var points = await _pointsMoneyRepository.GetPointsByMoneyDiscount(order.AmountDiscount);
-                                    //    user.Points -= points.MinPoints;
-                                    //}
-
-                                    ////cộng điểm theo đơn hàng
-                                    //user.Points += order.TotalPrice / 1000;
-
-                                    ////update user
-                                    //await _userRepository.UpdateUserAsync(user);
+                                    if(order.AmountDiscount != 0)
+                                    {
+                                        var pointDiscount = await _pointsMoneyRepository.GetPointsByMoneyDiscount(order.AmountDiscount);
+                                        user.Points -= pointDiscount.MinPoints;
+                                    }
 
                                     //send mail
                                     var orderWithDetails = await GetOrderWithDetailsAsync(orderCode);
                                     string body = EmailContent.OrderEmail(orderWithDetails, _mapper.Map<UserModel>(user));
 
-                                    //await _mailService.sendEmailAsync(new MailRequest()
-                                    //{
-                                    //    ToEmail = user.Email,
-                                    //    Body = body,
-                                    //    Subject = "[Little Joy] Hóa đơn điện tử số #" + orderCode
-                                    //});
 
                                     await transaction.CommitAsync();
                                     

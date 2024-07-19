@@ -80,9 +80,14 @@ namespace NET1806_LittleJoy.Service.Services
                             {
                                 totalPrice -= (int)item.AmountDiscount;
                                 discount = (int)item.AmountDiscount;
+                                if(model.PaymentMethod == 1)
+                                {
+                                    user.Points -= item.MinPoints;
+                                }
                                 break;
                             }
                         }
+                        await _userRepository.UpdateUserAsync(user);
                         //tạo order add vào database
                         var orderModel = new OrderModel()
                         {
@@ -351,12 +356,6 @@ namespace NET1806_LittleJoy.Service.Services
                             await _paymentRepository.UpdatePayment(paymentExist);
 
                             var user = await _userRepository.GetUserByIdAsync(orderExist.UserId);
-                            if (orderExist.AmountDiscount != 0)
-                            {
-                                //nếu có dùng điểm thì trừ điểm
-                                var points = await _pointsMoneyRepository.GetPointsByMoneyDiscount(orderExist.AmountDiscount);
-                                user.Points -= points.MinPoints;
-                            }
 
                             //cộng điểm theo đơn hàng
                             user.Points += orderExist.TotalPrice / 1000;
@@ -428,10 +427,9 @@ namespace NET1806_LittleJoy.Service.Services
                                 product.Quantity += (int)item.Quantity;
                                 await _productRepositoty.UpdateProductAsync(product);
                             }
-
+                            var user = await _userRepository.GetUserByIdAsync(orderExist.UserId);
                             if (paymentExist.Method == "VNPAY")
                             {
-                                var user = await _userRepository.GetUserByIdAsync(orderExist.UserId);
                                 string body = EmailContent.NotificationEmail(_mapper.Map<UserModel>(user), _mapper.Map<PaymentModel>(paymentExist), _mapper.Map<OrderModel>(orderExist), "người dùng hủy đơn");
                                 await _mailService.sendEmailAsync(new MailRequest()
                                 {
@@ -440,6 +438,13 @@ namespace NET1806_LittleJoy.Service.Services
                                     Subject = "[Little Joy Alert] Hoàn Tiền Đơn Hàng #" + paymentExist.Code
                                 });
                             }
+                            if(orderExist.AmountDiscount != 0)
+                            {
+                                var point = await _pointsMoneyRepository.GetPointsByMoneyDiscount(orderExist.AmountDiscount);
+                                user.Points += point.MinPoints;
+                            }
+                            
+                            await _userRepository.UpdateUserAsync(user);
                             break;
                         }
                 }
