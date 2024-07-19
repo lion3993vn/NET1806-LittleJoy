@@ -62,7 +62,7 @@ namespace NET1806_LittleJoy.Service.Services
                             throw new Exception("Không tìm thấy user");
                         }
 
-                        int totalPrice = 0;
+                        int totalPrice = 30000; //tien ship
                         foreach (var item in model.ProductOrders)
                         {
                             var product = await _productRepositoty.GetProductByIdAsync(item.Id);
@@ -71,7 +71,18 @@ namespace NET1806_LittleJoy.Service.Services
                                 totalPrice += (int)product.Price * item.Quantity;
                             }
                         }
-
+                        
+                        var listDiscount = await _pointsMoneyRepository.GetAll();
+                        int discount = 0;
+                        foreach (var item in listDiscount)
+                        {
+                            if(model.AmountDiscount == item.AmountDiscount && user.Points >= item.MinPoints)
+                            {
+                                totalPrice -= (int)item.AmountDiscount;
+                                discount = (int)item.AmountDiscount;
+                                break;
+                            }
+                        }
                         //tạo order add vào database
                         var orderModel = new OrderModel()
                         {
@@ -80,7 +91,7 @@ namespace NET1806_LittleJoy.Service.Services
                             TotalPrice = totalPrice,
                             Address = model.Address,
                             Note = model.Note,
-                            AmountDiscount = model.AmountDiscount,
+                            AmountDiscount = discount,
                             Status = "Đang Chờ",
                             Date = DateTime.UtcNow.AddHours(7),
                             DeliveryStatus = "",

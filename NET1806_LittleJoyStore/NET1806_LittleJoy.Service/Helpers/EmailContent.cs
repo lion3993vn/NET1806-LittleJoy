@@ -379,6 +379,7 @@ namespace NET1806_LittleJoy.Service.Helpers
     "                                <li><div style=\"padding: 10px 0;\">Email: <span>" + user.Email + "</span></div></li>\n" +
     "                                <li><div style=\"padding: 10px 0;\">SĐT Đặt Hàng: <span>" + order.PhoneNumber + "</span></div></li>\n" +
     "                                <li><div style=\"padding: 10px 0;\">SĐT Người Dùng: <span>" + user.PhoneNumber + "</span></div></li>\n" +
+    "                                <li><div style=\"padding: 10px 0;\">Tổng Tiền Hoàn: <span>" + order.TotalPrice + "</span></div></li>\n" +
     "                            </ul>\n" +
     "                        </div>\n" +
     "                    </div>\n" +
