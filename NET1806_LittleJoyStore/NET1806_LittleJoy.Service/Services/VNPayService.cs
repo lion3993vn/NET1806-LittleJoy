@@ -138,6 +138,7 @@ namespace NET1806_LittleJoy.Service.Services
                                     {
                                         var pointDiscount = await _pointsMoneyRepository.GetPointsByMoneyDiscount(order.AmountDiscount);
                                         user.Points -= pointDiscount.MinPoints;
+                                        await _userRepository.UpdateUserAsync(user);
                                     }
 
                                     //send mail
