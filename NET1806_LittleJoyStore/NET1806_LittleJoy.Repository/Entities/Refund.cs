@@ -3,6 +3,7 @@ using System.Collections.Generic;
 
 namespace NET1806_LittleJoy.Repository.Entities;
 
+//tinh nang dang duoc phat trien
 public partial class Refund
 {
     public int OrderId { get; set; }
