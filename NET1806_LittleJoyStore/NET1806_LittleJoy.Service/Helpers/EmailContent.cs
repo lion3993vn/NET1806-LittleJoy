@@ -202,7 +202,16 @@ namespace NET1806_LittleJoy.Service.Helpers
 "                                        style=\"float: inline-end;\">" + item.Price.ToString("N0") + "</span></td>\n" +
 "                            </tr>\n";
             }
-
+            infoDetails += "                            <tr>\n" +
+"                                <td style=\"border: 1px solid gray;padding: 7px 10px; text-align: center;\">" + count++ + "</td>\n" +
+"                                <td style=\"border: 1px solid gray; padding-left: 7px ;\"><span>Vận Chuyển</span></td>\n" +
+"                                <td style=\"border: 1px solid gray; padding-right: 7px ;\"><span\n" +
+"                                        style=\"float: inline-end;\"></span></td>\n" +
+"                                <td style=\"border: 1px solid gray; padding-right: 7px ;\"><span\n" +
+"                                        style=\"float: inline-end;\"></span></td>\n" +
+"                                <td style=\"border: 1px solid gray; padding-right: 7px ;\"><span\n" +
+"                                        style=\"float: inline-end;\">30,000</span></td>\n" +
+"                            </tr>\n";
             if (model.AmountDiscount != 0)
             {
                 int amount = (int)model.AmountDiscount;
@@ -217,6 +226,7 @@ namespace NET1806_LittleJoy.Service.Helpers
 "                                        style=\"float: inline-end;\">- " + amount.ToString("N0") + "</span></td>\n" +
 "                            </tr>\n";
             }
+            
             return "<div style=\"background-color:#f8f8f8;font-family:sans-serif;padding:15px\">\n" +
 "        <div style=\"max-width:1000px ; margin:auto\">\n" +
 "            <div\n" +
